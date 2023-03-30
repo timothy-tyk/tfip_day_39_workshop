@@ -22,12 +22,17 @@ public class MarvelRedisService {
     InputStream is = new ByteArrayInputStream(fullResponse.getBytes());
     JsonReader jReader = Json.createReader(is);
     JsonObject jObj = jReader.readObject();
-    // JsonObject data = jObj.getJsonObject("data");
     List<CharacterResult> results = jObj.getJsonObject("data").getJsonArray("results").stream().map(v -> CharacterResult.fromJson(v.asJsonObject())).toList();
     for(CharacterResult res: results){
-      redisTemplate.opsForValue().set(res.getName(), (Object)res);
-      redisTemplate.expire(res.getName(), 1, TimeUnit.HOURS);
+      redisTemplate.opsForValue().set(res.getId().toString(), res);
+      redisTemplate.expire(res.getId().toString(), 1, TimeUnit.HOURS);
     }
-
   }
+
+  public CharacterResult checkForCharacter(Integer cId){
+    CharacterResult ch = (CharacterResult)redisTemplate.opsForValue().get(cId.toString());
+    if(ch==null) return null;
+    return ch;
+  }
+
 }

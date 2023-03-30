@@ -1,46 +1,43 @@
 package server.server.service;
 
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.Date;
+import java.util.List;
+
+import org.bson.Document;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.util.DigestUtils;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
 
-import jakarta.xml.bind.DatatypeConverter;
-
+import server.server.model.Comment;
+import server.server.repository.MarvelRepository;
 
 @Service
 public class MarvelService {
+  // @Value("{marvel.public.key}")
+  // private String publicKey;
+  // @Value("{marvel.private.key}")
+  // private String privateKey;
   @Autowired
   MarvelRedisService marvelRedisSvc;
   public static final String publicKey="4b4e9c10815ec34495754c5a4df9d676";
   public static final String privateKey="7d1b1862a9d00ea6c1ffa58e2ce2a9255d2fc1c2";
-  // public static final long timeStamp = new Date().getTime();
 
   public static final String getCharactersUrl="https://gateway.marvel.com:443/v1/public/characters";
 
-  public String generateHash() throws NoSuchAlgorithmException{
+  public String generateHash(){
     long timeStamp = new Date().getTime();
-    MessageDigest md = MessageDigest.getInstance("MD5");
+    // MessageDigest md = MessageDigest.getInstance("MD5");
     String toHash = timeStamp+privateKey+publicKey;
     System.out.println(toHash);
-    md.update(toHash.getBytes());
-    byte[] digest = md.digest();
-    String hash = DatatypeConverter.printHexBinary(digest);
+    String hash = DigestUtils.md5DigestAsHex(toHash.getBytes());
     return hash.toLowerCase();
-    // StringBuffer sb = new StringBuffer();
-    // for(byte b:digest){
-    //   sb.append(Integer.toHexString((int)(b & 0xff)));
-    // }
-    // System.out.println(sb.toString());
-    // return sb.toString();
   }
 
-  public ResponseEntity<String> getCharacters(String query) throws NoSuchAlgorithmException{
+  public ResponseEntity<String> getCharacters(String query){
     String marvelUrl = UriComponentsBuilder.fromUriString(getCharactersUrl)
                       .queryParam("nameStartsWith", query)
                       .queryParam("ts", new Date().getTime())
@@ -53,5 +50,28 @@ public class MarvelService {
     // System.out.println(response.getBody());
     marvelRedisSvc.cacheToRedis(response.getBody());
     return response;
+  }
+
+  public ResponseEntity<String> getCharacterById(Integer cId){
+    String characterById = getCharactersUrl+"/"+cId;
+    String marvelUrl = UriComponentsBuilder.fromUriString(characterById)
+                      .queryParam("ts", new Date().getTime())
+                      .queryParam("apikey", publicKey)
+                      .queryParam("hash", generateHash())
+                      .toUriString();
+    RestTemplate restTemplate = new RestTemplate();
+    ResponseEntity<String> resp =  restTemplate.exchange(marvelUrl, HttpMethod.GET, null, String.class);
+    marvelRedisSvc.cacheToRedis(resp.getBody());
+    return resp;
+  }
+  @Autowired
+  MarvelRepository marvelRepo;
+  public ResponseEntity<String> addCommentToCharacter(Comment comment){
+    Document doc = marvelRepo.addComment(comment);
+    return ResponseEntity.ok().body(doc.toString());
+  }
+
+  public List<Document> getComments(Integer cId){
+    return marvelRepo.getComments(cId);
   }
 }
